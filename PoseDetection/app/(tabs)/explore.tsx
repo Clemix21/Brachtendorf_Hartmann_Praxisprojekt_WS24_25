@@ -1,11 +1,11 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
+import React, { useRef, useState, useEffect } from "react";
 import { StyleSheet, Button, Text, TouchableOpacity, View } from "react-native";
-import { useRef, useState, useEffect } from "react";
+import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
+import Canvas, { Image as CanvasImage } from "react-native-canvas";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-webgl";
-import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 
 export default function TabTwoScreen() {
   const [facing, setFacing] = useState("back");
