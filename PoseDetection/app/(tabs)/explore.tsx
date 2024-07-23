@@ -1,49 +1,76 @@
 import React, { useRef, useState, useEffect } from "react";
 import { StyleSheet, Button, Text, TouchableOpacity, View } from "react-native";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
-import Canvas, { Image as CanvasImage } from "react-native-canvas";
+import CustomCanvas from "../Canvas";
+import Canvas from "react-native-canvas";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-webgl";
 
 export default function TabTwoScreen() {
-  const [facing, setFacing] = useState("back");
+  const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
+  const [canvasContext, setCanvasContext] =
+    useState<CanvasRenderingContext2D | null>(null);
+
+  // Load model when permission is granted
+  useEffect(() => {
+    const loadModel = async () => {
+      await tf.ready();
+      await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet);
+      console.log("Model loaded");
+    };
+
+    if (permission?.granted) {
+      loadModel();
+    }
+  }, [permission]);
+
+  // Initialize canvas context
+  useEffect(() => {
+    if (canvasContext) {
+      // Ensure ctx is indeed a CanvasRenderingContext2D before using it
+      console.log("Canvas context is ready");
+    }
+  }, [canvasContext]);
 
   if (!permission) {
-    // Camera permissions are still loading.
     return <View />;
   }
 
   if (!permission.granted) {
-    // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
         <Text style={{ textAlign: "center" }}>
           We need your permission to show the camera
         </Text>
-        <Button onPress={requestPermission} title="grant permission" />
+        <Button onPress={requestPermission} title="Grant permission" />
       </View>
     );
   }
 
-  function toggleCameraFacing() {
+  const toggleCameraFacing = () => {
     setFacing((current) => (current === "back" ? "front" : "back"));
-  }
+  };
 
   return (
     <View style={styles.container}>
-      <CameraView
-        style={styles.camera}
-        facing={facing as CameraType | undefined}
-      >
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
-            <Text style={styles.text}>Flip Camera</Text>
-          </TouchableOpacity>
-        </View>
-      </CameraView>
+      <CameraView style={styles.camera} facing={facing} />
+      <CustomCanvas
+        style={styles.canvas}
+        onCanvasReady={(canvas) => {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            setCanvasContext(ctx as unknown as CanvasRenderingContext2D);
+          }
+        }}
+      />
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
+          <Text style={styles.text}>Flip Camera</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -56,20 +83,29 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
+  canvas: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 1,
+  },
   buttonContainer: {
-    flex: 1,
+    position: "absolute",
+    bottom: 20,
+    width: "100%",
     flexDirection: "row",
-    backgroundColor: "transparent",
-    margin: 64,
+    justifyContent: "center",
   },
   button: {
-    flex: 1,
-    alignSelf: "flex-end",
-    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    padding: 10,
+    borderRadius: 5,
+    marginHorizontal: 10,
   },
   text: {
-    fontSize: 24,
-    fontWeight: "bold",
+    fontSize: 16,
     color: "white",
   },
 });
