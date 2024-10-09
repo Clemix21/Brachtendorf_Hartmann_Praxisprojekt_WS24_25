@@ -1,6 +1,6 @@
 Praxisprojekt WS 24/25
 
-Für das Modul Praxisprojekt habe ich mir überlegt, eine mobile Anwendung zu entwickeln, die sich durch die Integration von Videotracking zur Korrektur der Haltung bei Übungen wie Wallsquats und Planks auszeichnet. Die Anwendung nutzt die Kamera des Geräts, um die Körperhaltung der Nutzer*innen in Echtzeit zu analysieren und sofortiges Feedback zur Verbesserung der Übungsausführung zu geben.
+Für das Modul Praxisprojekt habe ich mir überlegt, eine mobile Anwendung zu entwickeln, die mithilfe von Videotracking zur Korrektur der Haltung bei Kraftsport- und Cardioübungen wie Wallsquats oder Planks genutzt werden kann. Die Anwendung nutzt die Kamera des Geräts, um die Körperhaltung der Nutzer*innen in Echtzeit zu analysieren und sofortiges Feedback zur Verbesserung der Übungsausführung zu geben.
 
 Das System erfasst kontinuierlich Bilder der Übungsausführung der Nutzer*innen und verwendet das Pose Detection Modell, um die Positionen von Gelenkpunkten wie Ellbogen, Schultern, Knien und Hüften zu bestimmen. Diese Daten werden analysiert, um Abweichungen von der korrekten Haltung zu identifizieren.
 
