@@ -1,24 +1,33 @@
 import React, { useRef, useState, useEffect } from "react";
 import { StyleSheet, Button, Text, TouchableOpacity, View } from "react-native";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
-import CustomCanvas from "../Canvas";
-import Canvas from "react-native-canvas";
+import { GLView } from "expo-gl"; // Expo's GLView
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
-import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-webgl"; // TensorFlow with WebGL backend
+
+import { Pose, Keypoint } from "@tensorflow-models/pose-detection";
 
 export default function TabTwoScreen() {
   const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
-  const [canvasContext, setCanvasContext] =
-    useState<CanvasRenderingContext2D | null>(null);
+  const [detector, setDetector] = useState<poseDetection.PoseDetector | null>(
+    null
+  );
+  const [poses, setPoses] = useState<Pose[]>([]);
+  const [isCameraReady, setIsCameraReady] = useState(false); // Zustand zur Verfolgung, ob die Kamera bereit ist
 
-  // Load model when permission is granted
+  const cameraRef = useRef<CameraView | null>(null); // Referenz zur Kamera
+  const glRef = useRef<WebGLRenderingContext | null>(null);
+
   useEffect(() => {
     const loadModel = async () => {
       await tf.ready();
-      await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet);
+      const poseDetector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet
+      );
+      setDetector(poseDetector);
       console.log("Model loaded");
     };
 
@@ -27,13 +36,96 @@ export default function TabTwoScreen() {
     }
   }, [permission]);
 
-  // Initialize canvas context
   useEffect(() => {
-    if (canvasContext) {
-      // Ensure ctx is indeed a CanvasRenderingContext2D before using it
-      console.log("Canvas context is ready");
+    const interval = setInterval(() => {
+      onCameraFrame(); // Rufe die Funktion in regelmäßigen Abständen auf
+    }, 1000); // 1000 ms = 1 Sekunde
+
+    return () => clearInterval(interval); // Bereinige den Timer, wenn das Component unmountet wird
+  }, [detector, isCameraReady]);
+
+  const onCameraFrame = async () => {
+    if (!detector || !isCameraReady || !cameraRef.current) return;
+
+    console.log("Attempting to capture a frame");
+
+    const frame = await cameraRef.current.takePictureAsync({
+      skipProcessing: true,
+    });
+
+    if (!frame) {
+      console.warn("No frame captured");
+      return;
     }
-  }, [canvasContext]);
+
+    console.log("Frame captured:", frame);
+
+    // Bild in ein ImageBitmap konvertieren
+    const imageBitmap = await fetch(frame.uri)
+      .then((response) => response.blob())
+      .then((blob) => createImageBitmap(blob));
+
+    // Übergeben der ImageBitmap an pose detector
+    const img = tf.browser.fromPixels(imageBitmap);
+    const predictions = await detector.estimatePoses(img);
+    setPoses(predictions);
+
+    console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
+
+    img.dispose(); // Speicher freigeben
+    imageBitmap.close(); // ImageBitmap freigeben
+  };
+
+  const onCameraReady = () => {
+    setIsCameraReady(true);
+    const intervalId = setInterval(onCameraFrame, 100); // Capture frame alle 100ms
+
+    return () => clearInterval(intervalId); // Aufräumen
+  };
+
+  const onContextCreate = async (
+    gl: WebGLRenderingContext & { endFrameEXP: () => void }
+  ) => {
+    // Erster Versuch Rendering Logik
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    const render = () => {
+      if (gl) {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        poses.forEach((pose) => {
+          if (pose.keypoints) {
+            pose.keypoints.forEach((keypoint) => {
+              drawKeypoint(gl, keypoint);
+            });
+          }
+        });
+        gl.endFrameEXP();
+      }
+    };
+
+    const loop = () => {
+      render();
+      requestAnimationFrame(loop);
+    };
+    loop();
+  };
+
+  const drawKeypoint = (gl: WebGLRenderingContext, keypoint: Keypoint) => {
+    const { x, y } = keypoint;
+    const points = new Float32Array([x, y]);
+    const buffer = gl.createBuffer();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
+
+    const positionLocation = 0;
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, 1);
+    gl.deleteBuffer(buffer);
+  };
 
   if (!permission) {
     return <View />;
@@ -56,16 +148,13 @@ export default function TabTwoScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} facing={facing} />
-      <CustomCanvas
-        style={styles.canvas}
-        onCanvasReady={(canvas) => {
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            setCanvasContext(ctx as unknown as CanvasRenderingContext2D);
-          }
-        }}
+      <CameraView
+        ref={cameraRef} // Referenz zur Kamera hier setzen
+        style={styles.camera}
+        facing={facing}
+        onCameraReady={onCameraReady}
       />
+      <GLView style={styles.canvas} onContextCreate={onContextCreate} />
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
           <Text style={styles.text}>Flip Camera</Text>
