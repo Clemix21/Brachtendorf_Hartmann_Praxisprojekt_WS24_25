@@ -221,53 +221,6 @@ export default function TabTwoScreen() {
     return program;
   }
 
-  function calculateAngle(
-    left_shoulder: { x: number; y: number },
-    left_hip: { x: number; y: number },
-    left_elbow: { x: number; y: number }
-  ): number {
-    // Berechne die Vektoren
-    const vector_shoulder_hip = {
-      x: left_hip.x - left_shoulder.x,
-      y: left_hip.y - left_shoulder.y,
-    };
-    const vector_shoulder_elbow = {
-      x: left_elbow.x - left_shoulder.x,
-      y: left_elbow.y - left_shoulder.y,
-    };
-
-    // Skalarprodukt berechnen
-    const dot_product =
-      vector_shoulder_hip.x * vector_shoulder_elbow.x +
-      vector_shoulder_hip.y * vector_shoulder_elbow.y;
-
-    // Längen der Vektoren berechnen
-    const length_shoulder_hip = Math.sqrt(
-      vector_shoulder_hip.x ** 2 + vector_shoulder_hip.y ** 2
-    );
-    const length_shoulder_elbow = Math.sqrt(
-      vector_shoulder_elbow.x ** 2 + vector_shoulder_elbow.y ** 2
-    );
-
-    // Kosinus des Winkels berechnen
-    const cos_theta =
-      dot_product / (length_shoulder_hip * length_shoulder_elbow);
-
-    // Winkel in Grad umwandeln
-    const angle = Math.acos(cos_theta) * (180 / Math.PI);
-
-    return angle;
-  }
-
-  // Beispielkoordinaten der Punkte
-  const left_shoulder = { x: 539.4, y: 385.4 };
-  const left_hip = { x: 631.3, y: 491.7 };
-  const left_elbow = { x: 608.0, y: 477.2 };
-
-  // Berechnung des Winkels
-  const shoulderAngle = calculateAngle(left_shoulder, left_hip, left_elbow);
-  console.log(`Winkel an der Schulter: ${shoulderAngle.toFixed(2)} Grad`);
-
   // Funktion zum Zeichnen eines Keypoints
   function drawKeypoint(
     gl: WebGLRenderingContext,
