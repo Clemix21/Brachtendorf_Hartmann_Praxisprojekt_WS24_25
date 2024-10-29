@@ -112,6 +112,61 @@ export default function TabTwoScreen() {
     loop();
   };
 
+  function calculateAngle(
+    shoulder: Keypoint,
+    elbow: Keypoint,
+    wrist: Keypoint
+  ) {
+    // Vektoren berechnen
+    const vector_shoulder_elbow = {
+      x: elbow.x - shoulder.x,
+      y: elbow.y - shoulder.y,
+    };
+    const vector_elbow_wrist = {
+      x: wrist.x - elbow.x,
+      y: wrist.y - elbow.y,
+    };
+
+    // Skalarprodukt der Vektoren berechnen
+    const dot_product =
+      vector_shoulder_elbow.x * vector_elbow_wrist.x +
+      vector_shoulder_elbow.y * vector_elbow_wrist.y;
+
+    // Längen der Vektoren berechnen
+    const length_shoulder_elbow = Math.sqrt(
+      vector_shoulder_elbow.x ** 2 + vector_shoulder_elbow.y ** 2
+    );
+    const length_elbow_wrist = Math.sqrt(
+      vector_elbow_wrist.x ** 2 + vector_elbow_wrist.y ** 2
+    );
+
+    // Kosinus des Winkels berechnen
+    const cos_angle =
+      dot_product / (length_shoulder_elbow * length_elbow_wrist);
+
+    // Winkel in Grad umrechnen
+    const angle = Math.acos(cos_angle) * (180 / Math.PI);
+
+    return angle;
+  }
+
+  if (poses.length > 0) {
+    const leftShoulder = poses[0].keypoints.find(
+      (k) => k.name === "left_shoulder"
+    );
+    const leftElbow = poses[0].keypoints.find((k) => k.name === "left_elbow");
+    const leftWrist = poses[0].keypoints.find((k) => k.name === "left_wrist");
+
+    if (leftShoulder && leftElbow && leftWrist) {
+      const angle = calculateAngle(leftShoulder, leftElbow, leftWrist);
+      console.log(
+        `Winkel zwischen Schulter, Ellbogen und Handgelenk: ${angle.toFixed(2)} Grad`
+      );
+    }
+  } else {
+    console.warn("Keine Posen erkannt");
+  }
+
   const drawKeypoint = (gl: WebGLRenderingContext, keypoint: Keypoint) => {
     const { x, y } = keypoint;
     const points = new Float32Array([x, y]);
