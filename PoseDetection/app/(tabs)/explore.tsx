@@ -113,36 +113,29 @@ export default function TabTwoScreen() {
   };
 
   function calculateAngle(
-    shoulder: Keypoint,
-    elbow: Keypoint,
-    wrist: Keypoint
+    pointA: Keypoint,
+    pointB: Keypoint,
+    pointC: Keypoint
   ) {
     // Vektoren berechnen
-    const vector_shoulder_elbow = {
-      x: elbow.x - shoulder.x,
-      y: elbow.y - shoulder.y,
+    const vector_AB = {
+      x: pointB.x - pointA.x,
+      y: pointB.y - pointA.y,
     };
-    const vector_elbow_wrist = {
-      x: wrist.x - elbow.x,
-      y: wrist.y - elbow.y,
+    const vector_BC = {
+      x: pointC.x - pointB.x,
+      y: pointC.y - pointB.y,
     };
 
     // Skalarprodukt der Vektoren berechnen
-    const dot_product =
-      vector_shoulder_elbow.x * vector_elbow_wrist.x +
-      vector_shoulder_elbow.y * vector_elbow_wrist.y;
+    const dot_product = vector_AB.x * vector_BC.x + vector_AB.y * vector_BC.y;
 
     // Längen der Vektoren berechnen
-    const length_shoulder_elbow = Math.sqrt(
-      vector_shoulder_elbow.x ** 2 + vector_shoulder_elbow.y ** 2
-    );
-    const length_elbow_wrist = Math.sqrt(
-      vector_elbow_wrist.x ** 2 + vector_elbow_wrist.y ** 2
-    );
+    const length_AB = Math.sqrt(vector_AB.x ** 2 + vector_AB.y ** 2);
+    const length_BC = Math.sqrt(vector_BC.x ** 2 + vector_BC.y ** 2);
 
     // Kosinus des Winkels berechnen
-    const cos_angle =
-      dot_product / (length_shoulder_elbow * length_elbow_wrist);
+    const cos_angle = dot_product / (length_AB * length_BC);
 
     // Winkel in Grad umrechnen
     const angle = Math.acos(cos_angle) * (180 / Math.PI);
@@ -151,11 +144,28 @@ export default function TabTwoScreen() {
   }
 
   if (poses.length > 0) {
+    // Keypoints für Berechnung des eingeschlossenen Winkels von Schulter, Ellbogen und Handgelenk
     const leftShoulder = poses[0].keypoints.find(
       (k) => k.name === "left_shoulder"
     );
     const leftElbow = poses[0].keypoints.find((k) => k.name === "left_elbow");
     const leftWrist = poses[0].keypoints.find((k) => k.name === "left_wrist");
+
+    // Keypoints für Berechnung des eingeschlossenen Winkels von Ober- und Unterschenkel
+    const leftHip = poses[0].keypoints.find((k) => k.name === "left_hip");
+    const leftKnee = poses[0].keypoints.find((k) => k.name === "left_knee");
+    const leftAnkle = poses[0].keypoints.find((k) => k.name === "left_ankle");
+
+    if (leftHip && leftKnee && leftAnkle) {
+      const kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+      console.log(
+        `Winkel zwischen Hüfte, Knie und Sprunggelenk: ${kneeAngle.toFixed(2)} Grad`
+      );
+    } else {
+      console.warn(
+        "Einige Keypoints fehlen für die Winkelberechnung der Beine."
+      );
+    }
 
     if (leftShoulder && leftElbow && leftWrist) {
       const angle = calculateAngle(leftShoulder, leftElbow, leftWrist);
