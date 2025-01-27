@@ -17,6 +17,14 @@ export default function TabTwoScreen() {
   );
   const [poses, setPoses] = useState<Pose[]>([]);
   const [isCameraReady, setIsCameraReady] = useState(false); // Zustand zur Verfolgung, ob die Kamera bereit ist
+  const [angles, setAngles] = useState({
+    elbow: 0,
+    knee: 0,
+    hip: 0,
+    shoulder: 0,
+  }); // Zustand für die Winkel
+  const [wallsquatStatus, setWallsquatStatus] = useState<string>(""); // Status für die Wallsquat-Erkennung
+  const [plankStatus, setPlankStatus] = useState<string>(""); // Status für die Plank-Erkennung
 
   const cameraRef = useRef<CameraView | null>(null); // Referenz zur Kamera
   const glRef = useRef<WebGLRenderingContext | null>(null);
@@ -71,6 +79,79 @@ export default function TabTwoScreen() {
     setPoses(predictions);
 
     console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
+
+    // Berechne die Winkel
+    if (predictions.length > 0) {
+      const leftShoulder = predictions[0].keypoints.find(
+        (k) => k.name === "left_shoulder"
+      );
+      const leftElbow = predictions[0].keypoints.find(
+        (k) => k.name === "left_elbow"
+      );
+      const leftWrist = predictions[0].keypoints.find(
+        (k) => k.name === "left_wrist"
+      );
+
+      const leftHip = predictions[0].keypoints.find(
+        (k) => k.name === "left_hip"
+      );
+      const leftKnee = predictions[0].keypoints.find(
+        (k) => k.name === "left_knee"
+      );
+      const leftAnkle = predictions[0].keypoints.find(
+        (k) => k.name === "left_ankle"
+      );
+
+      let elbowAngle = 0;
+      let kneeAngle = 0;
+      let hipAngle = 0;
+      let shoulderAngle = 0;
+
+      if (leftShoulder && leftElbow && leftWrist) {
+        elbowAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
+      }
+
+      if (leftHip && leftKnee && leftAnkle) {
+        kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+      }
+
+      if (leftShoulder && leftHip && leftKnee) {
+        hipAngle = calculateAngle(leftShoulder, leftHip, leftKnee);
+      }
+
+      if (leftElbow && leftShoulder && leftHip) {
+        shoulderAngle = calculateAngle(leftHip, leftShoulder, leftElbow);
+      }
+
+      setAngles({
+        elbow: elbowAngle,
+        knee: kneeAngle,
+        hip: hipAngle,
+        shoulder: shoulderAngle,
+      });
+
+      // Wallsquat-Erkennung
+      if (
+        Math.abs(kneeAngle - 90) < 20 &&
+        Math.abs(hipAngle - 90) < 20 &&
+        Math.abs(shoulderAngle - 90) < 20
+      ) {
+        setWallsquatStatus("Wallsquat erkannt! Perfekte Position."); // Wallsquat erkannt
+      } else {
+        setWallsquatStatus("Nicht in Wallsquat-Position."); // Keine Wallsquat-Position
+      }
+
+      // Plank-Erkennung
+      if (
+        Math.abs(shoulderAngle - 120) < 20 && // Schulter, Ellbogen und Hüfte
+        Math.abs(kneeAngle) < 20 && // Hüfte, Knie und Knöchel
+        Math.abs(hipAngle) < 20 // Hüfte in Linie mit den Beinen
+      ) {
+        setPlankStatus("Plank erkannt! Gute Position."); // Plank erkannt
+      } else {
+        setPlankStatus("Nicht in Plank-Position."); // Keine Plank-Position
+      }
+    }
 
     img.dispose(); // Speicher freigeben
     imageBitmap.close(); // ImageBitmap freigeben
@@ -143,6 +224,10 @@ export default function TabTwoScreen() {
     return angle;
   }
 
+  const toggleCameraFacing = () => {
+    setFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
   if (poses.length > 0) {
     // Keypoints für Berechnung des eingeschlossenen Winkels von Schulter, Ellbogen und Handgelenk
     const leftShoulder = poses[0].keypoints.find(
@@ -207,19 +292,35 @@ export default function TabTwoScreen() {
     );
   }
 
-  const toggleCameraFacing = () => {
-    setFacing((current) => (current === "back" ? "front" : "back"));
-  };
-
   return (
     <View style={styles.container}>
       <CameraView
         ref={cameraRef} // Referenz zur Kamera hier setzen
         style={styles.camera}
         facing={facing}
-        onCameraReady={onCameraReady}
+        onCameraReady={() => setIsCameraReady(true)}
       />
-      <GLView style={styles.canvas} onContextCreate={onContextCreate} />
+      <View style={styles.overlay}>
+        {/* Echtzeit-Log für Wallsquat-Status */}
+        <Text style={styles.wallsquatLog}>{wallsquatStatus}</Text>
+
+        {/* Echtzeit-Log für Plank-Status */}
+        <Text style={styles.plankLog}>{plankStatus}</Text>
+
+        {/* Winkelanzeige */}
+        <Text style={styles.angleText}>
+          Elbow Angle: {angles.elbow.toFixed(2)}°
+        </Text>
+        <Text style={styles.angleText}>
+          Knee Angle: {angles.knee.toFixed(2)}°
+        </Text>
+        <Text style={styles.angleText}>
+          Hip Angle: {angles.hip.toFixed(2)}°
+        </Text>
+        <Text style={styles.angleText}>
+          Shoulder Angle: {angles.shoulder.toFixed(2)}°
+        </Text>
+      </View>
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
           <Text style={styles.text}>Flip Camera</Text>
@@ -261,5 +362,38 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 16,
     color: "white",
+  },
+  overlay: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    padding: 10,
+    borderRadius: 8,
+  },
+  wallsquatLog: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "left",
+    marginBottom: 10, // Abstand zum Winkel-Overlay
+    backgroundColor: "rgba(0, 0, 0, 0.6)", // Halbtransparenter Hintergrund
+    padding: 3,
+    borderRadius: 8,
+  },
+  plankLog: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "left",
+    marginBottom: 10, // Abstand zum Winkel-Overlay
+    backgroundColor: "rgba(0, 0, 0, 0.6)", // Halbtransparenter Hintergrund
+    padding: 3,
+    borderRadius: 8,
+  },
+  angleText: {
+    color: "white",
+    fontSize: 16,
+    marginBottom: 5,
   },
 });
