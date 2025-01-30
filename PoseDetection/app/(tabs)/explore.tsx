@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect } from "react";
 import { StyleSheet, Button, Text, TouchableOpacity, View } from "react-native";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { GLView } from "expo-gl"; // Expo's GLView
+// import { Audio } from "expo-av";
+// import { Asset } from "expo-asset";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
@@ -25,6 +27,8 @@ export default function TabTwoScreen() {
   }); // Zustand für die Winkel
   const [wallsquatStatus, setWallsquatStatus] = useState<string>(""); // Status für die Wallsquat-Erkennung
   const [plankStatus, setPlankStatus] = useState<string>(""); // Status für die Plank-Erkennung
+  const [wallsquatColor, setWallsquatColor] = useState<string>("red");
+  const [plankColor, setPlankColor] = useState<string>("red");
 
   const cameraRef = useRef<CameraView | null>(null); // Referenz zur Kamera
   const glRef = useRef<WebGLRenderingContext | null>(null);
@@ -55,7 +59,7 @@ export default function TabTwoScreen() {
   const onCameraFrame = async () => {
     if (!detector || !isCameraReady || !cameraRef.current) return;
 
-    console.log("Attempting to capture a frame");
+    //console.log("Attempting to capture a frame");
 
     const frame = await cameraRef.current.takePictureAsync({
       skipProcessing: true,
@@ -78,7 +82,7 @@ export default function TabTwoScreen() {
     const predictions = await detector.estimatePoses(img);
     setPoses(predictions);
 
-    console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
+    //console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
 
     // Berechne die Winkel
     if (predictions.length > 0) {
@@ -132,13 +136,16 @@ export default function TabTwoScreen() {
 
       // Wallsquat-Erkennung
       if (
-        Math.abs(kneeAngle - 90) < 20 &&
-        Math.abs(hipAngle - 90) < 20 &&
-        Math.abs(shoulderAngle - 90) < 20
+        // Math.abs(kneeAngle - 90) < 20 &&
+        // Math.abs(hipAngle - 90) < 20 &&
+        // Math.abs(shoulderAngle - 90) < 20
+        Math.abs(elbowAngle - 90) < 5
       ) {
         setWallsquatStatus("Wallsquat erkannt! Perfekte Position."); // Wallsquat erkannt
+        setWallsquatColor("green");
       } else {
         setWallsquatStatus("Nicht in Wallsquat-Position."); // Keine Wallsquat-Position
+        setWallsquatColor("red");
       }
 
       // Plank-Erkennung
@@ -148,9 +155,26 @@ export default function TabTwoScreen() {
         Math.abs(hipAngle) < 20 // Hüfte in Linie mit den Beinen
       ) {
         setPlankStatus("Plank erkannt! Gute Position."); // Plank erkannt
+        setPlankColor("green");
       } else {
         setPlankStatus("Nicht in Plank-Position."); // Keine Plank-Position
+        setPlankColor("red");
       }
+
+      // const playSuccessSound = async () => {
+      //   try {
+      //     const sound = new Audio.Sound();
+      //     await sound.loadAsync(require("../../assets/sounds/Godschieraa.wav"));
+      //     await sound.playAsync();
+      //   } catch (error) {
+      //     console.error("Fehler beim Abspielen des Sounds:", error);
+      //   }
+      // };
+
+      // if (Math.abs(elbowAngle - 90) < 5) {
+      //   console.log("Elbow angle is 90 degrees");
+      //   playSuccessSound();
+      // }
     }
 
     img.dispose(); // Speicher freigeben
@@ -240,26 +264,6 @@ export default function TabTwoScreen() {
     const leftHip = poses[0].keypoints.find((k) => k.name === "left_hip");
     const leftKnee = poses[0].keypoints.find((k) => k.name === "left_knee");
     const leftAnkle = poses[0].keypoints.find((k) => k.name === "left_ankle");
-
-    if (leftHip && leftKnee && leftAnkle) {
-      const kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
-      console.log(
-        `Winkel zwischen Hüfte, Knie und Sprunggelenk: ${kneeAngle.toFixed(2)} Grad`
-      );
-    } else {
-      console.warn(
-        "Einige Keypoints fehlen für die Winkelberechnung der Beine."
-      );
-    }
-
-    if (leftShoulder && leftElbow && leftWrist) {
-      const angle = calculateAngle(leftShoulder, leftElbow, leftWrist);
-      console.log(
-        `Winkel zwischen Schulter, Ellbogen und Handgelenk: ${angle.toFixed(2)} Grad`
-      );
-    }
-  } else {
-    console.warn("Keine Posen erkannt");
   }
 
   const drawKeypoint = (gl: WebGLRenderingContext, keypoint: Keypoint) => {
@@ -300,12 +304,19 @@ export default function TabTwoScreen() {
         facing={facing}
         onCameraReady={() => setIsCameraReady(true)}
       />
+
+      {/* <GLView style={styles.canvas} onContextCreate={onContextCreate} /> */}
+
       <View style={styles.overlay}>
         {/* Echtzeit-Log für Wallsquat-Status */}
-        <Text style={styles.wallsquatLog}>{wallsquatStatus}</Text>
+        <View style={[styles.statusBox, { backgroundColor: wallsquatColor }]}>
+          <Text style={styles.statusText}>{wallsquatStatus}</Text>
+        </View>
 
         {/* Echtzeit-Log für Plank-Status */}
-        <Text style={styles.plankLog}>{plankStatus}</Text>
+        <View style={[styles.statusBox, { backgroundColor: plankColor }]}>
+          <Text style={styles.statusText}>{plankStatus}</Text>
+        </View>
 
         {/* Winkelanzeige */}
         <Text style={styles.angleText}>
@@ -371,25 +382,16 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
   },
-  wallsquatLog: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "left",
-    marginBottom: 10, // Abstand zum Winkel-Overlay
-    backgroundColor: "rgba(0, 0, 0, 0.6)", // Halbtransparenter Hintergrund
-    padding: 3,
+  statusBox: {
+    padding: 10,
+    marginVertical: 5,
     borderRadius: 8,
+    alignItems: "center",
   },
-  plankLog: {
+  statusText: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
-    textAlign: "left",
-    marginBottom: 10, // Abstand zum Winkel-Overlay
-    backgroundColor: "rgba(0, 0, 0, 0.6)", // Halbtransparenter Hintergrund
-    padding: 3,
-    borderRadius: 8,
   },
   angleText: {
     color: "white",
