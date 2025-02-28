@@ -4,6 +4,7 @@ import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { GLView } from "expo-gl"; // Expo's GLView
 // import { Audio } from "expo-av";
 // import { Asset } from "expo-asset";
+import * as Speech from "expo-speech";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
@@ -30,11 +31,38 @@ export default function TabTwoScreen() {
   const [wallsquatColor, setWallsquatColor] = useState<string>("red");
   const [plankColor, setPlankColor] = useState<string>("red");
 
+  const [poseDetected, setPoseDetected] = useState(false);
+  const prevPoseDetected = useRef(poseDetected); // Speichert den vorherigen Zustand von poseDetected
+  const [timer, setTimer] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (poseDetected !== prevPoseDetected.current) {
+      // Nur wenn sich der Wert ändert
+      if (poseDetected) {
+        Speech.speak("Wallsquat erkannt!", {
+          language: "de",
+          pitch: 1.0,
+          rate: 1.0,
+        });
+      } else {
+        Speech.speak("Bitte die Wallsquat-Position korrigieren.", {
+          language: "de",
+          pitch: 1.0,
+          rate: 1.0,
+        });
+      }
+    }
+    prevPoseDetected.current = poseDetected; // Update des vorherigen Werts
+  }, [poseDetected]); // Läuft nur, wenn sich poseDetected ändert
+
   const cameraRef = useRef<CameraView | null>(null); // Referenz zur Kamera
   const glRef = useRef<WebGLRenderingContext | null>(null);
 
   useEffect(() => {
     const loadModel = async () => {
+      await tf.setBackend("webgl");
       await tf.ready();
       const poseDetector = await poseDetection.createDetector(
         poseDetection.SupportedModels.MoveNet
@@ -56,6 +84,39 @@ export default function TabTwoScreen() {
     return () => clearInterval(interval); // Bereinige den Timer, wenn das Component unmountet wird
   }, [detector, isCameraReady]);
 
+  useEffect(() => {
+    if (poseDetected) {
+      if (!isRunning) {
+        setIsRunning(true);
+        setTimer(0); // Timer zurücksetzen
+      }
+
+      intervalRef.current = setInterval(() => {
+        setTimer((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setIsRunning(false);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [poseDetected]);
+
+  // useEffect(() => {
+  //   console.log("Pose Detected:", poseDetected);
+  //   console.log("isRunning:", isRunning);
+  //   console.log("Timer:", timer);
+  //   console.log("Wallsquat Status:", wallsquatStatus);
+  // }, [poseDetected, isRunning, timer, wallsquatStatus]);
+
   const onCameraFrame = async () => {
     if (!detector || !isCameraReady || !cameraRef.current) return;
 
@@ -70,7 +131,7 @@ export default function TabTwoScreen() {
       return;
     }
 
-    console.log("Frame captured:", frame);
+    // console.log("Frame captured:", frame);
 
     // Bild in ein ImageBitmap konvertieren
     const imageBitmap = await fetch(frame.uri)
@@ -139,20 +200,22 @@ export default function TabTwoScreen() {
         // Math.abs(kneeAngle - 90) < 20 &&
         // Math.abs(hipAngle - 90) < 20 &&
         // Math.abs(shoulderAngle - 90) < 20
-        Math.abs(elbowAngle - 90) < 5
+        Math.abs(elbowAngle - 90) < 15
       ) {
         setWallsquatStatus("Wallsquat erkannt! Perfekte Position."); // Wallsquat erkannt
         setWallsquatColor("green");
+        setPoseDetected(true); // Timer starten
       } else {
         setWallsquatStatus("Nicht in Wallsquat-Position."); // Keine Wallsquat-Position
         setWallsquatColor("red");
+        setPoseDetected(false); // Timer stoppen
       }
 
       // Plank-Erkennung
       if (
-        Math.abs(shoulderAngle - 120) < 20 && // Schulter, Ellbogen und Hüfte
-        Math.abs(kneeAngle) < 20 && // Hüfte, Knie und Knöchel
-        Math.abs(hipAngle) < 20 // Hüfte in Linie mit den Beinen
+        Math.abs(shoulderAngle - 120) < 20 &&
+        Math.abs(kneeAngle) < 20 &&
+        Math.abs(hipAngle) < 20
       ) {
         setPlankStatus("Plank erkannt! Gute Position."); // Plank erkannt
         setPlankColor("green");
@@ -183,7 +246,7 @@ export default function TabTwoScreen() {
 
   const onCameraReady = () => {
     setIsCameraReady(true);
-    const intervalId = setInterval(onCameraFrame, 100); // Capture frame alle 100ms
+    const intervalId = setInterval(onCameraFrame, 500); // Capture frame alle 100ms
 
     return () => clearInterval(intervalId); // Aufräumen
   };
@@ -308,6 +371,9 @@ export default function TabTwoScreen() {
       {/* <GLView style={styles.canvas} onContextCreate={onContextCreate} /> */}
 
       <View style={styles.overlay}>
+        {/* Timer anzeigen */}
+        <Text style={styles.timerText}>Timer: {timer} Sekunden</Text>
+
         {/* Echtzeit-Log für Wallsquat-Status */}
         <View style={[styles.statusBox, { backgroundColor: wallsquatColor }]}>
           <Text style={styles.statusText}>{wallsquatStatus}</Text>
@@ -397,5 +463,12 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     marginBottom: 5,
+  },
+  timerText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "white",
+    textAlign: "center",
+    marginBottom: 10,
   },
 });
