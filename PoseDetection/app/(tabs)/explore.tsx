@@ -1,5 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
-import { StyleSheet, Button, Text, TouchableOpacity, View } from "react-native";
+import {
+  StyleSheet,
+  Button,
+  Text,
+  TouchableOpacity,
+  View,
+  Switch,
+} from "react-native";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { GLView } from "expo-gl"; // Expo's GLView
 // import { Audio } from "expo-av";
@@ -31,31 +38,58 @@ export default function TabTwoScreen() {
   const [wallsquatColor, setWallsquatColor] = useState<string>("red");
   const [plankColor, setPlankColor] = useState<string>("red");
 
-  const [poseDetected, setPoseDetected] = useState(false);
+  enum Poses {
+    WALLSQUAT = "Wallsquat",
+    PLANK = "Plank",
+  }
+
+  const [poseDetected, setPoseDetected] = useState<Set<Poses>>(new Set());
+
+  const updatePoseDetected = (poses: Poses, detected: boolean) => {
+    setPoseDetected((prev) => {
+      const newSet = new Set(prev);
+      if (detected) {
+        newSet.add(poses);
+      } else {
+        newSet.delete(poses);
+      }
+      return newSet;
+    });
+  };
+
   const prevPoseDetected = useRef(poseDetected); // Speichert den vorherigen Zustand von poseDetected
+  const [audioFeedbackEnabled, setAudioFeedbackEnabled] = useState(true); // Switch-Status für Audio-Feedback
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const TOLERANCE = 15; // Erlaubte Abweichung
 
   useEffect(() => {
-    if (poseDetected !== prevPoseDetected.current) {
-      // Nur wenn sich der Wert ändert
-      if (poseDetected) {
-        Speech.speak("Wallsquat erkannt!", {
-          language: "de",
-          pitch: 1.0,
-          rate: 1.0,
-        });
-      } else {
-        Speech.speak("Bitte die Wallsquat-Position korrigieren.", {
-          language: "de",
-          pitch: 1.0,
-          rate: 1.0,
-        });
-      }
+    if (audioFeedbackEnabled) {
+      Object.values(Poses).forEach((poses) => {
+        const wasDetected = prevPoseDetected.current.has(poses);
+        const isDetected = poseDetected.has(poses);
+
+        if (wasDetected !== isDetected) {
+          if (isDetected) {
+            Speech.speak(`${poses} erkannt!`, {
+              language: "de",
+              pitch: 1.0,
+              rate: 1.0,
+            });
+          } else {
+            Speech.speak(`Bitte die ${poses}-Position korrigieren.`, {
+              language: "de",
+              pitch: 1.0,
+              rate: 1.0,
+            });
+          }
+        }
+      });
     }
-    prevPoseDetected.current = poseDetected; // Update des vorherigen Werts
-  }, [poseDetected]); // Läuft nur, wenn sich poseDetected ändert
+
+    prevPoseDetected.current = new Set(poseDetected);
+  }, [poseDetected, audioFeedbackEnabled]);
 
   const cameraRef = useRef<CameraView | null>(null); // Referenz zur Kamera
   const glRef = useRef<WebGLRenderingContext | null>(null);
@@ -85,37 +119,40 @@ export default function TabTwoScreen() {
   }, [detector, isCameraReady]);
 
   useEffect(() => {
-    if (poseDetected) {
-      if (!isRunning) {
-        setIsRunning(true);
-        setTimer(0); // Timer zurücksetzen
-      }
-
+    if (poseDetected.size > 0 && !isRunning) {
+      setIsRunning(true);
+      setTimer(0);
       intervalRef.current = setInterval(() => {
         setTimer((prev) => prev + 1);
       }, 1000);
-    } else {
+    } else if (poseDetected.size === 0 && isRunning) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
-        intervalRef.current = null;
       }
+      intervalRef.current = null;
       setIsRunning(false);
     }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
   }, [poseDetected]);
 
+  // debugging
   // useEffect(() => {
-  //   console.log("Pose Detected:", poseDetected);
-  //   console.log("isRunning:", isRunning);
-  //   console.log("Timer:", timer);
-  //   console.log("Wallsquat Status:", wallsquatStatus);
-  // }, [poseDetected, isRunning, timer, wallsquatStatus]);
+  // console.log("Pose Detected:", poseDetected);
+  // console.log("Timer Running:", isRunning);
+  // console.log("Timer Value:", timer);
+  // console.log("Size", poseDetected.size);
+  // console.log(poseDetected.has(Poses.WALLSQUAT));
+  // console.log(poseDetected.has(Poses.PLANK));
+  // console.log("🔥 Timer läuft?", intervalRef.current);
+  // console.log("👀 Pose erkannt:", poseDetected);
+  // console.log("intervalRef.current:", intervalRef.current);
+  // console.log("intervalRef:", intervalRef);
+  // }, [
+  //   poseDetected,
+  //   timer,
+  //   poseDetected.size,
+  //   intervalRef.current,
+  //   intervalRef,
+  // ]);
 
   const onCameraFrame = async () => {
     if (!detector || !isCameraReady || !cameraRef.current) return;
@@ -197,31 +234,34 @@ export default function TabTwoScreen() {
 
       // Wallsquat-Erkennung
       if (
-        // Math.abs(kneeAngle - 90) < 20 &&
-        // Math.abs(hipAngle - 90) < 20 &&
-        // Math.abs(shoulderAngle - 90) < 20
-        Math.abs(elbowAngle - 90) < 15
+        (Math.abs(kneeAngle - 90) < TOLERANCE &&
+          Math.abs(hipAngle - 90) < TOLERANCE &&
+          Math.abs(shoulderAngle - 90) < TOLERANCE) ||
+        Math.abs(elbowAngle - 90) < TOLERANCE
       ) {
-        setWallsquatStatus("Wallsquat erkannt! Perfekte Position."); // Wallsquat erkannt
+        setWallsquatStatus("Wallsquat erkannt!"); // Wallsquat erkannt
         setWallsquatColor("green");
-        setPoseDetected(true); // Timer starten
+        updatePoseDetected(Poses.WALLSQUAT, true);
       } else {
         setWallsquatStatus("Nicht in Wallsquat-Position."); // Keine Wallsquat-Position
         setWallsquatColor("red");
-        setPoseDetected(false); // Timer stoppen
+        updatePoseDetected(Poses.WALLSQUAT, false);
       }
 
       // Plank-Erkennung
       if (
-        Math.abs(shoulderAngle - 120) < 20 &&
-        Math.abs(kneeAngle) < 20 &&
-        Math.abs(hipAngle) < 20
+        (Math.abs(shoulderAngle - 120) < TOLERANCE &&
+          Math.abs(kneeAngle) < TOLERANCE &&
+          Math.abs(hipAngle) < TOLERANCE) ||
+        Math.abs(elbowAngle) < TOLERANCE
       ) {
-        setPlankStatus("Plank erkannt! Gute Position."); // Plank erkannt
+        setPlankStatus("Plank erkannt!"); // Plank erkannt
         setPlankColor("green");
+        updatePoseDetected(Poses.PLANK, true);
       } else {
         setPlankStatus("Nicht in Plank-Position."); // Keine Plank-Position
         setPlankColor("red");
+        updatePoseDetected(Poses.PLANK, false);
       }
 
       // const playSuccessSound = async () => {
@@ -373,6 +413,13 @@ export default function TabTwoScreen() {
       <View style={styles.overlay}>
         {/* Timer anzeigen */}
         <Text style={styles.timerText}>Timer: {timer} Sekunden</Text>
+
+        {/* Audio-Feedback */}
+        <Text style={styles.angleText}>Audio-Feedback</Text>
+        <Switch
+          value={audioFeedbackEnabled}
+          onValueChange={setAudioFeedbackEnabled}
+        />
 
         {/* Echtzeit-Log für Wallsquat-Status */}
         <View style={[styles.statusBox, { backgroundColor: wallsquatColor }]}>
