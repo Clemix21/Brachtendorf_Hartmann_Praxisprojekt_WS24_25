@@ -7,10 +7,13 @@ import {
   View,
   Switch,
 } from "react-native";
-import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
+import {
+  CameraType,
+  CameraView,
+  useCameraPermissions,
+  ImageSize,
+} from "expo-camera";
 import { GLView } from "expo-gl"; // Expo's GLView
-// import { Audio } from "expo-av";
-// import { Asset } from "expo-asset";
 import * as Speech from "expo-speech";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
@@ -18,6 +21,7 @@ import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-webgl"; // TensorFlow with WebGL backend
 
 import { Pose, Keypoint } from "@tensorflow-models/pose-detection";
+import PoseOverlay from "@/components/Skelett";
 
 export default function TabTwoScreen() {
   const [facing, setFacing] = useState<CameraType>("back");
@@ -113,7 +117,7 @@ export default function TabTwoScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       onCameraFrame(); // Rufe die Funktion in regelmäßigen Abständen auf
-    }, 1000); // 1000 ms = 1 Sekunde
+    }, 200); // 1000 ms = 1 Sekunde
 
     return () => clearInterval(interval); // Bereinige den Timer, wenn das Component unmountet wird
   }, [detector, isCameraReady]);
@@ -156,7 +160,6 @@ export default function TabTwoScreen() {
 
   const onCameraFrame = async () => {
     if (!detector || !isCameraReady || !cameraRef.current) return;
-
     //console.log("Attempting to capture a frame");
 
     const frame = await cameraRef.current.takePictureAsync({
@@ -180,7 +183,7 @@ export default function TabTwoScreen() {
     const predictions = await detector.estimatePoses(img);
     setPoses(predictions);
 
-    //console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
+    console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
 
     // Berechne die Winkel
     if (predictions.length > 0) {
@@ -234,11 +237,12 @@ export default function TabTwoScreen() {
 
       // Wallsquat-Erkennung
       if (
-        (Math.abs(kneeAngle - 90) < TOLERANCE &&
-          Math.abs(hipAngle - 90) < TOLERANCE &&
-          Math.abs(shoulderAngle - 90) < TOLERANCE) ||
-        Math.abs(elbowAngle - 90) < TOLERANCE
+        Math.abs(kneeAngle - 90) < TOLERANCE &&
+        Math.abs(hipAngle - 90) < TOLERANCE &&
+        Math.abs(shoulderAngle - 90) < TOLERANCE
       ) {
+        //  ||
+        // Math.abs(elbowAngle - 90) < TOLERANCE
         setWallsquatStatus("Wallsquat erkannt!"); // Wallsquat erkannt
         setWallsquatColor("green");
         updatePoseDetected(Poses.WALLSQUAT, true);
@@ -250,11 +254,11 @@ export default function TabTwoScreen() {
 
       // Plank-Erkennung
       if (
-        (Math.abs(shoulderAngle - 120) < TOLERANCE &&
-          Math.abs(kneeAngle) < TOLERANCE &&
-          Math.abs(hipAngle) < TOLERANCE) ||
-        Math.abs(elbowAngle) < TOLERANCE
+        Math.abs(shoulderAngle - 120) < TOLERANCE &&
+        Math.abs(kneeAngle) < TOLERANCE &&
+        Math.abs(hipAngle) < TOLERANCE
       ) {
+        // || Math.abs(elbowAngle) < TOLERANCE
         setPlankStatus("Plank erkannt!"); // Plank erkannt
         setPlankColor("green");
         updatePoseDetected(Poses.PLANK, true);
@@ -263,21 +267,6 @@ export default function TabTwoScreen() {
         setPlankColor("red");
         updatePoseDetected(Poses.PLANK, false);
       }
-
-      // const playSuccessSound = async () => {
-      //   try {
-      //     const sound = new Audio.Sound();
-      //     await sound.loadAsync(require("../../assets/sounds/Godschieraa.wav"));
-      //     await sound.playAsync();
-      //   } catch (error) {
-      //     console.error("Fehler beim Abspielen des Sounds:", error);
-      //   }
-      // };
-
-      // if (Math.abs(elbowAngle - 90) < 5) {
-      //   console.log("Elbow angle is 90 degrees");
-      //   playSuccessSound();
-      // }
     }
 
     img.dispose(); // Speicher freigeben
@@ -289,35 +278,6 @@ export default function TabTwoScreen() {
     const intervalId = setInterval(onCameraFrame, 500); // Capture frame alle 100ms
 
     return () => clearInterval(intervalId); // Aufräumen
-  };
-
-  const onContextCreate = async (
-    gl: WebGLRenderingContext & { endFrameEXP: () => void }
-  ) => {
-    // Erster Versuch Rendering Logik
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-    const render = () => {
-      if (gl) {
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        poses.forEach((pose) => {
-          if (pose.keypoints) {
-            pose.keypoints.forEach((keypoint) => {
-              drawKeypoint(gl, keypoint);
-            });
-          }
-        });
-        gl.endFrameEXP();
-      }
-    };
-
-    const loop = () => {
-      render();
-      requestAnimationFrame(loop);
-    };
-    loop();
   };
 
   function calculateAngle(
@@ -369,21 +329,6 @@ export default function TabTwoScreen() {
     const leftAnkle = poses[0].keypoints.find((k) => k.name === "left_ankle");
   }
 
-  const drawKeypoint = (gl: WebGLRenderingContext, keypoint: Keypoint) => {
-    const { x, y } = keypoint;
-    const points = new Float32Array([x, y]);
-    const buffer = gl.createBuffer();
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
-
-    const positionLocation = 0;
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.POINTS, 0, 1);
-    gl.deleteBuffer(buffer);
-  };
-
   if (!permission) {
     return <View />;
   }
@@ -409,6 +354,16 @@ export default function TabTwoScreen() {
       />
 
       {/* <GLView style={styles.canvas} onContextCreate={onContextCreate} /> */}
+
+      {poses.length > 0 && poses[0].keypoints ? (
+        <PoseOverlay
+          keypoints={poses[0].keypoints}
+          angles={angles}
+          width={1000}
+          height={625}
+          mirrored={facing === "back"}
+        />
+      ) : null}
 
       <View style={styles.overlay}>
         {/* Timer anzeigen */}
