@@ -9,14 +9,15 @@ interface Props {
   width: number;
   height: number;
   mirrored?: boolean;
+  detectedPoses: Set<string>; // Set mit erkannten Posen
 }
 
-const TOLERANCE = 15;
-const OPTIMAL_ANGLES: { [key: string]: number } = {
-  elbow: 90,
-  knee: 90,
-  hip: 90,
-  shoulder: 120,
+const TOLERANCE = 15; // Erlaubte Abweichung
+
+// Definiere optimale Winkel für verschiedene Posen
+const OPTIMAL_ANGLES: { [pose: string]: { [joint: string]: number } } = {
+  Wallsquat: { knee: 90, hip: 90, shoulder: 90 },
+  Plank: { shoulder: 120, knee: 0, hip: 0 },
 };
 
 const PoseOverlay: React.FC<Props> = ({
@@ -25,6 +26,7 @@ const PoseOverlay: React.FC<Props> = ({
   width,
   height,
   mirrored = false,
+  detectedPoses,
 }) => {
   if (!keypoints || keypoints.length === 0) return null;
 
@@ -40,12 +42,12 @@ const PoseOverlay: React.FC<Props> = ({
               cx={transformX(point.x)}
               cy={point.y}
               r={5}
-              fill="red"
+              fill="white"
             />
           ) : null
         )}
 
-        {drawSkeleton(keypoints, angles, transformX)}
+        {drawSkeleton(keypoints, angles, transformX, detectedPoses)}
       </Svg>
     </View>
   );
@@ -67,7 +69,8 @@ const SKELETON_EDGES = [
 const drawSkeleton = (
   keypoints: Keypoint[],
   angles: { [key: string]: number },
-  transformX: (x: number) => number
+  transformX: (x: number) => number,
+  detectedPoses: Set<string>
 ) => {
   return SKELETON_EDGES.map(([pointA, pointB, joint], index) => {
     const kpA = keypoints.find((kp) => kp.name === pointA);
@@ -79,9 +82,20 @@ const drawSkeleton = (
       kpA.score > 0.5 &&
       kpB.score > 0.5
     ) {
-      const angle = angles[joint] || 0;
-      const optimal = OPTIMAL_ANGLES[joint] || 0;
-      const color = Math.abs(angle - optimal) < TOLERANCE ? "green" : "orange";
+      let color = "orange"; // Standardfarbe
+
+      detectedPoses.forEach((pose) => {
+        if (OPTIMAL_ANGLES[pose] && OPTIMAL_ANGLES[pose][joint] !== undefined) {
+          const optimalAngle = OPTIMAL_ANGLES[pose][joint];
+          const actualAngle = angles[joint] || 0;
+
+          if (Math.abs(actualAngle - optimalAngle) < TOLERANCE) {
+            color = "green";
+          } else {
+            color = "orange";
+          }
+        }
+      });
 
       return (
         <Line

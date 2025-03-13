@@ -353,8 +353,6 @@ export default function TabTwoScreen() {
         onCameraReady={() => setIsCameraReady(true)}
       />
 
-      {/* <GLView style={styles.canvas} onContextCreate={onContextCreate} /> */}
-
       {poses.length > 0 && poses[0].keypoints ? (
         <PoseOverlay
           keypoints={poses[0].keypoints}
@@ -362,6 +360,7 @@ export default function TabTwoScreen() {
           width={1000}
           height={625}
           mirrored={facing === "back"}
+          detectedPoses={poseDetected}
         />
       ) : null}
 
