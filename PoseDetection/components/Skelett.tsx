@@ -6,8 +6,10 @@ import { Keypoint } from "@tensorflow-models/pose-detection";
 interface Props {
   keypoints: Keypoint[];
   angles: { [key: string]: number };
-  width: number;
-  height: number;
+  width: number; // windowWidth
+  height: number; // windowHeight
+  inputWidth: number; // 640
+  inputHeight: number; // 480
   mirrored?: boolean;
   detectedPoses: Set<string>; // Set mit erkannten Posen
 }
@@ -25,12 +27,20 @@ const PoseOverlay: React.FC<Props> = ({
   angles,
   width,
   height,
+  inputWidth,
+  inputHeight,
   mirrored = false,
   detectedPoses,
 }) => {
   if (!keypoints || keypoints.length === 0) return null;
 
-  const transformX = (x: number) => (mirrored ? width - x : x);
+  const scaleX = width / inputWidth;
+  const scaleY = height / inputHeight;
+
+  const transformX = (x: number) =>
+    mirrored ? width - x * scaleX : x * scaleX;
+
+  const transformY = (y: number) => y * scaleY;
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -40,14 +50,14 @@ const PoseOverlay: React.FC<Props> = ({
             <Circle
               key={index}
               cx={transformX(point.x)}
-              cy={point.y}
+              cy={transformY(point.y)}
               r={5}
               fill="white"
             />
           ) : null
         )}
 
-        {drawSkeleton(keypoints, angles, transformX, detectedPoses)}
+        {drawSkeleton(keypoints, angles, transformX, transformY, detectedPoses)}
       </Svg>
     </View>
   );
@@ -70,6 +80,7 @@ const drawSkeleton = (
   keypoints: Keypoint[],
   angles: { [key: string]: number },
   transformX: (x: number) => number,
+  transformY: (y: number) => number,
   detectedPoses: Set<string>
 ) => {
   return SKELETON_EDGES.map(([pointA, pointB, joint], index) => {
@@ -82,7 +93,7 @@ const drawSkeleton = (
       kpA.score > 0.5 &&
       kpB.score > 0.5
     ) {
-      let color = "orange"; // Standardfarbe
+      let color = "red"; // Standardfarbe
 
       detectedPoses.forEach((pose) => {
         if (OPTIMAL_ANGLES[pose] && OPTIMAL_ANGLES[pose][joint] !== undefined) {
@@ -92,7 +103,7 @@ const drawSkeleton = (
           if (Math.abs(actualAngle - optimalAngle) < TOLERANCE) {
             color = "green";
           } else {
-            color = "orange";
+            color = "red";
           }
         }
       });
@@ -101,9 +112,9 @@ const drawSkeleton = (
         <Line
           key={index}
           x1={transformX(kpA.x)}
-          y1={kpA.y}
+          y1={transformY(kpA.y)}
           x2={transformX(kpB.x)}
-          y2={kpB.y}
+          y2={transformY(kpB.y)}
           stroke={color}
           strokeWidth={3}
         />

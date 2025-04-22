@@ -15,6 +15,7 @@ import {
 } from "expo-camera";
 import { GLView } from "expo-gl"; // Expo's GLView
 import * as Speech from "expo-speech";
+import { useWindowDimensions } from "react-native";
 
 import * as poseDetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
@@ -41,6 +42,8 @@ export default function TabTwoScreen() {
   const [plankStatus, setPlankStatus] = useState<string>(""); // Status für die Plank-Erkennung
   const [wallsquatColor, setWallsquatColor] = useState<string>("red");
   const [plankColor, setPlankColor] = useState<string>("red");
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [imageSize, setImageSize] = useState({ width: 640, height: 480 });
 
   enum Poses {
     WALLSQUAT = "Wallsquat",
@@ -62,7 +65,7 @@ export default function TabTwoScreen() {
   };
 
   const prevPoseDetected = useRef(poseDetected); // Speichert den vorherigen Zustand von poseDetected
-  const [audioFeedbackEnabled, setAudioFeedbackEnabled] = useState(true); // Switch-Status für Audio-Feedback
+  const [audioFeedbackEnabled, setAudioFeedbackEnabled] = useState(false); // Switch-Status für Audio-Feedback
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -115,11 +118,20 @@ export default function TabTwoScreen() {
   }, [permission]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      onCameraFrame(); // Rufe die Funktion in regelmäßigen Abständen auf
-    }, 200); // 1000 ms = 1 Sekunde
+    let isMounted = true;
 
-    return () => clearInterval(interval); // Bereinige den Timer, wenn das Component unmountet wird
+    const processLoop = async () => {
+      while (isMounted) {
+        await onCameraFrame();
+        await new Promise((r) => setTimeout(r, 0)); // Warten auf den nächsten Frame
+      }
+    };
+
+    if (detector && isCameraReady) processLoop();
+
+    return () => {
+      isMounted = false;
+    };
   }, [detector, isCameraReady]);
 
   useEffect(() => {
@@ -160,7 +172,6 @@ export default function TabTwoScreen() {
 
   const onCameraFrame = async () => {
     if (!detector || !isCameraReady || !cameraRef.current) return;
-    //console.log("Attempting to capture a frame");
 
     const frame = await cameraRef.current.takePictureAsync({
       skipProcessing: true,
@@ -172,6 +183,7 @@ export default function TabTwoScreen() {
     }
 
     // console.log("Frame captured:", frame);
+    // console.log(frame?.width, frame?.height); // Bildgröße in der Konsole anzeigen
 
     // Bild in ein ImageBitmap konvertieren
     const imageBitmap = await fetch(frame.uri)
@@ -180,10 +192,15 @@ export default function TabTwoScreen() {
 
     // Übergeben der ImageBitmap an pose detector
     const img = tf.browser.fromPixels(imageBitmap);
+
+    const [inputHeight, inputWidth] = img.shape; // Bildgröße für die Pose-Berechnung
+    // console.log("Input Width & Height:", inputWidth, inputHeight);
+    setImageSize({ width: inputWidth, height: inputHeight });
+
     const predictions = await detector.estimatePoses(img);
     setPoses(predictions);
 
-    console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
+    // console.log("Predictions:", predictions); // Keypoints in der Konsole anzeigen
 
     // Berechne die Winkel
     if (predictions.length > 0) {
@@ -238,11 +255,10 @@ export default function TabTwoScreen() {
       // Wallsquat-Erkennung
       if (
         Math.abs(kneeAngle - 90) < TOLERANCE &&
-        Math.abs(hipAngle - 90) < TOLERANCE &&
-        Math.abs(shoulderAngle - 90) < TOLERANCE
+        Math.abs(hipAngle - 90) < TOLERANCE
+        // Math.abs(shoulderAngle - 90) < TOLERANCE
+        // Math.abs(elbowAngle) < TOLERANCE
       ) {
-        //  ||
-        // Math.abs(elbowAngle - 90) < TOLERANCE
         setWallsquatStatus("Wallsquat erkannt!"); // Wallsquat erkannt
         setWallsquatColor("green");
         updatePoseDetected(Poses.WALLSQUAT, true);
@@ -254,11 +270,11 @@ export default function TabTwoScreen() {
 
       // Plank-Erkennung
       if (
-        Math.abs(shoulderAngle - 120) < TOLERANCE &&
-        Math.abs(kneeAngle) < TOLERANCE &&
-        Math.abs(hipAngle) < TOLERANCE
+        (Math.abs(shoulderAngle - 90) < TOLERANCE &&
+          Math.abs(kneeAngle) < TOLERANCE &&
+          Math.abs(hipAngle) < TOLERANCE) ||
+        Math.abs(elbowAngle - 90) < TOLERANCE
       ) {
-        // || Math.abs(elbowAngle) < TOLERANCE
         setPlankStatus("Plank erkannt!"); // Plank erkannt
         setPlankColor("green");
         updatePoseDetected(Poses.PLANK, true);
@@ -357,8 +373,10 @@ export default function TabTwoScreen() {
         <PoseOverlay
           keypoints={poses[0].keypoints}
           angles={angles}
-          width={1000}
-          height={625}
+          width={windowWidth}
+          height={windowHeight}
+          inputWidth={imageSize.width}
+          inputHeight={imageSize.height}
           mirrored={facing === "back"}
           detectedPoses={poseDetected}
         />
@@ -415,14 +433,6 @@ const styles = StyleSheet.create({
   },
   camera: {
     flex: 1,
-  },
-  canvas: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    zIndex: 1,
   },
   buttonContainer: {
     position: "absolute",
